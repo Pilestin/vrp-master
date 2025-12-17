@@ -102,4 +102,4 @@ def train_model(num_epochs=100, batch_size=32, num_nodes=20, save_path="deep_lea
 if __name__ == "__main__":
     # Ensure directory exists
     os.makedirs("deep_learning/checkpoints", exist_ok=True)
-    train_model(num_epochs=200, batch_size=64, num_nodes=30)
+    train_model(num_epochs=500, batch_size=32, num_nodes=30)

@@ -97,6 +97,8 @@ class AttentionModel(nn.Module):
             tour_indices.append(selected)
             
             # Update mask
+            # Avoid in-place operation for autograd
+            mask = mask.clone()
             mask.scatter_(1, selected.unsqueeze(1), True)
             
             # Next input

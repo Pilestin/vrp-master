@@ -74,13 +74,15 @@ class NeuralSolver(BaseSolver):
             if current_load + demand <= self.capacity:
                 current_route.append(node_id)
                 current_load += demand
+                yield routes + [current_route] # Update visualization for each node
             else:
                 current_route.append(0)
                 routes.append(current_route)
-                yield routes + [current_route] # Visualization update
+                yield routes + [current_route] # Show return to depot
                 
                 current_route = [0, node_id]
                 current_load = demand
+                yield routes + [current_route] # Show start of new route
                 
         current_route.append(0)
         routes.append(current_route)
