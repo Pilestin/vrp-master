@@ -13,6 +13,13 @@ from vrp_system.solvers.greedy_solver import GreedySolver
 from vrp_system.solvers.ortools_solver import ORToolsSolver
 from vrp_system.solvers.simulated_annealing_solver import SimulatedAnnealingSolver
 from vrp_system.solvers.alns_solver import ALNSSolver
+# Try importing NeuralSolver, if torch is missing, handle gracefully
+try:
+    from deep_learning.neural_solver import NeuralSolver
+    DL_AVAILABLE = True
+except ImportError:
+    DL_AVAILABLE = False
+    
 from vrp_system.visualizer import Visualizer
 import vrp_config as config
 
@@ -43,6 +50,10 @@ class VRPApp:
         ttk.Radiobutton(self.control_frame, text="Greedy (Nearest Neighbor)", variable=self.solver_var, value="Greedy").pack(anchor=tk.W, padx=10)
         ttk.Radiobutton(self.control_frame, text="Simulated Annealing", variable=self.solver_var, value="SimulatedAnnealing").pack(anchor=tk.W, padx=10)
         ttk.Radiobutton(self.control_frame, text="ALNS (Adaptive Large Neighborhood)", variable=self.solver_var, value="ALNS").pack(anchor=tk.W, padx=10)
+        
+        if DL_AVAILABLE:
+            ttk.Radiobutton(self.control_frame, text="Neural Network (Deep Learning)", variable=self.solver_var, value="Neural").pack(anchor=tk.W, padx=10)
+            
         ttk.Radiobutton(self.control_frame, text="OR-Tools", variable=self.solver_var, value="ORTools").pack(anchor=tk.W, padx=10)
         
         self.show_optimal_var = tk.BooleanVar(value=False)
@@ -155,6 +166,8 @@ class VRPApp:
             solver = ALNSSolver(self.graph, capacity=config.VEHICLE_CAPACITY, 
                                 iterations=config.ALNS_ITERATIONS, 
                                 remove_count=config.ALNS_REMOVE_COUNT)
+        elif self.solver_name == "Neural" and DL_AVAILABLE:
+            solver = NeuralSolver(self.graph, capacity=config.VEHICLE_CAPACITY, model_path=config.DL_MODEL_PATH)
         else:
             solver = ORToolsSolver(self.graph, vehicle_capacity=config.VEHICLE_CAPACITY, num_vehicles=config.NUM_VEHICLES)
             
