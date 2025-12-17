@@ -12,7 +12,9 @@ from vrp_system.instance_generator import InstanceGenerator
 from vrp_system.solvers.greedy_solver import GreedySolver
 from vrp_system.solvers.ortools_solver import ORToolsSolver
 from vrp_system.solvers.simulated_annealing_solver import SimulatedAnnealingSolver
+from vrp_system.solvers.alns_solver import ALNSSolver
 from vrp_system.visualizer import Visualizer
+import vrp_config as config
 
 class VRPApp:
     def __init__(self, root):
@@ -32,7 +34,7 @@ class VRPApp:
         
         # Node Count Input
         ttk.Label(self.control_frame, text="Number of Nodes:").pack(pady=5, anchor=tk.W)
-        self.node_count_var = tk.IntVar(value=30)
+        self.node_count_var = tk.IntVar(value=config.DEFAULT_NUM_NODES)
         self.node_count_entry = ttk.Entry(self.control_frame, textvariable=self.node_count_var)
         self.node_count_entry.pack(pady=5, anchor=tk.W, fill=tk.X)
 
@@ -40,6 +42,7 @@ class VRPApp:
         self.solver_var = tk.StringVar(value="Greedy")
         ttk.Radiobutton(self.control_frame, text="Greedy (Nearest Neighbor)", variable=self.solver_var, value="Greedy").pack(anchor=tk.W, padx=10)
         ttk.Radiobutton(self.control_frame, text="Simulated Annealing", variable=self.solver_var, value="SimulatedAnnealing").pack(anchor=tk.W, padx=10)
+        ttk.Radiobutton(self.control_frame, text="ALNS (Adaptive Large Neighborhood)", variable=self.solver_var, value="ALNS").pack(anchor=tk.W, padx=10)
         ttk.Radiobutton(self.control_frame, text="OR-Tools", variable=self.solver_var, value="ORTools").pack(anchor=tk.W, padx=10)
         
         self.show_optimal_var = tk.BooleanVar(value=False)
@@ -110,9 +113,9 @@ class VRPApp:
         try:
             num_nodes = self.node_count_var.get()
         except:
-            num_nodes = 30
+            num_nodes = config.DEFAULT_NUM_NODES
             
-        generator = InstanceGenerator(num_nodes=num_nodes, seed=None) 
+        generator = InstanceGenerator(num_nodes=num_nodes, seed=config.SEED) 
         self.graph = generator.generate_vrp_instance()
         
         # Setup Visualizer
@@ -132,7 +135,7 @@ class VRPApp:
         if self.calculate_optimal:
             self.update_status("Calculating Optimal Solution (Benchmark)...")
             # Use OR-Tools as optimal solver
-            solver = ORToolsSolver(self.graph, vehicle_capacity=40, num_vehicles=5)
+            solver = ORToolsSolver(self.graph, vehicle_capacity=config.VEHICLE_CAPACITY, num_vehicles=config.NUM_VEHICLES)
             for routes in solver.solve():
                 self.optimal_routes = routes
             
@@ -142,18 +145,25 @@ class VRPApp:
         self.update_status(f"Running {self.solver_name}...")
         
         if self.solver_name == "Greedy":
-            solver = GreedySolver(self.graph, capacity=40)
+            solver = GreedySolver(self.graph, capacity=config.VEHICLE_CAPACITY)
         elif self.solver_name == "SimulatedAnnealing":
-            solver = SimulatedAnnealingSolver(self.graph, capacity=40)
+            solver = SimulatedAnnealingSolver(self.graph, capacity=config.VEHICLE_CAPACITY, 
+                                              initial_temp=config.SA_INITIAL_TEMP, 
+                                              cooling_rate=config.SA_COOLING_RATE, 
+                                              max_iterations=config.SA_MAX_ITERATIONS)
+        elif self.solver_name == "ALNS":
+            solver = ALNSSolver(self.graph, capacity=config.VEHICLE_CAPACITY, 
+                                iterations=config.ALNS_ITERATIONS, 
+                                remove_count=config.ALNS_REMOVE_COUNT)
         else:
-            solver = ORToolsSolver(self.graph, vehicle_capacity=40, num_vehicles=5)
+            solver = ORToolsSolver(self.graph, vehicle_capacity=config.VEHICLE_CAPACITY, num_vehicles=config.NUM_VEHICLES)
             
         final_routes = []
         for step, routes in enumerate(solver.solve()):
             final_routes = routes
             # Update GUI from thread
             self.root.after(0, self.update_viz, routes, f"{self.solver_name} - Step {step}")
-            time.sleep(0.05) # Animation delay
+            time.sleep(config.ANIMATION_DELAY) # Animation delay
             
         self.final_routes = final_routes
         final_cost = self.calculate_cost(final_routes)
