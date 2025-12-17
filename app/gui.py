@@ -11,6 +11,7 @@ import networkx as nx
 from vrp_system.instance_generator import InstanceGenerator
 from vrp_system.solvers.greedy_solver import GreedySolver
 from vrp_system.solvers.ortools_solver import ORToolsSolver
+from vrp_system.solvers.simulated_annealing_solver import SimulatedAnnealingSolver
 from vrp_system.visualizer import Visualizer
 
 class VRPApp:
@@ -29,18 +30,36 @@ class VRPApp:
         # Controls
         ttk.Label(self.control_frame, text="VRP Solver Control", font=("Helvetica", 14, "bold")).pack(pady=(0, 20))
         
+        # Node Count Input
+        ttk.Label(self.control_frame, text="Number of Nodes:").pack(pady=5, anchor=tk.W)
+        self.node_count_var = tk.IntVar(value=30)
+        self.node_count_entry = ttk.Entry(self.control_frame, textvariable=self.node_count_var)
+        self.node_count_entry.pack(pady=5, anchor=tk.W, fill=tk.X)
+
         ttk.Label(self.control_frame, text="Solver Selection:").pack(pady=5, anchor=tk.W)
         self.solver_var = tk.StringVar(value="Greedy")
         ttk.Radiobutton(self.control_frame, text="Greedy (Nearest Neighbor)", variable=self.solver_var, value="Greedy").pack(anchor=tk.W, padx=10)
+        ttk.Radiobutton(self.control_frame, text="Simulated Annealing", variable=self.solver_var, value="SimulatedAnnealing").pack(anchor=tk.W, padx=10)
         ttk.Radiobutton(self.control_frame, text="OR-Tools", variable=self.solver_var, value="ORTools").pack(anchor=tk.W, padx=10)
         
         self.show_optimal_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(self.control_frame, text="Calculate Optimal Solution (Benchmark)", variable=self.show_optimal_var).pack(pady=20, anchor=tk.W)
         
-        ttk.Button(self.control_frame, text="Run Simulation", command=self.run_simulation).pack(pady=10, fill=tk.X)
+        self.run_btn = ttk.Button(self.control_frame, text="Run Simulation", command=self.run_simulation)
+        self.run_btn.pack(pady=10, fill=tk.X)
         
-        self.view_optimal_btn = ttk.Button(self.control_frame, text="View Optimal Route", command=self.view_optimal, state=tk.DISABLED)
-        self.view_optimal_btn.pack(pady=5, fill=tk.X)
+        self.reset_btn = ttk.Button(self.control_frame, text="Reset / New Instance", command=self.reset_simulation, state=tk.DISABLED)
+        self.reset_btn.pack(pady=5, fill=tk.X)
+
+        self.view_mode_var = tk.StringVar(value="Solver")
+        self.view_toggle_frame = ttk.LabelFrame(self.control_frame, text="View Mode")
+        self.view_toggle_frame.pack(pady=10, fill=tk.X)
+        
+        self.view_solver_rb = ttk.Radiobutton(self.view_toggle_frame, text="Solver Solution", variable=self.view_mode_var, value="Solver", command=self.toggle_view, state=tk.DISABLED)
+        self.view_solver_rb.pack(anchor=tk.W, padx=5, pady=2)
+        
+        self.view_optimal_rb = ttk.Radiobutton(self.view_toggle_frame, text="Optimal Solution", variable=self.view_mode_var, value="Optimal", command=self.toggle_view, state=tk.DISABLED)
+        self.view_optimal_rb.pack(anchor=tk.W, padx=5, pady=2)
         
         ttk.Separator(self.control_frame, orient='horizontal').pack(fill='x', pady=20)
         
@@ -59,21 +78,41 @@ class VRPApp:
         self.viz = None
         self.running = False
         self.optimal_routes = None
+        self.final_routes = None
+
+    def reset_simulation(self):
+        self.ax.clear()
+        self.canvas.draw()
+        self.status_label.config(text="Ready")
+        self.result_label.config(text="")
+        self.view_solver_rb.config(state=tk.DISABLED)
+        self.view_optimal_rb.config(state=tk.DISABLED)
+        self.reset_btn.config(state=tk.DISABLED)
+        self.run_btn.config(state=tk.NORMAL)
+        self.view_mode_var.set("Solver")
 
     def run_simulation(self):
         if self.running:
             return
         self.running = True
-        self.view_optimal_btn.config(state=tk.DISABLED)
+        self.run_btn.config(state=tk.DISABLED)
+        self.reset_btn.config(state=tk.DISABLED)
+        self.view_solver_rb.config(state=tk.DISABLED)
+        self.view_optimal_rb.config(state=tk.DISABLED)
+        
         self.status_label.config(text="Generating Instance...")
         self.result_label.config(text="")
         self.optimal_routes = None
+        self.final_routes = None
+        self.view_mode_var.set("Solver")
         
         # Generate Instance
-        # Using a fixed seed for reproducibility or None for random? User didn't specify, but random is usually better for an app.
-        # But to compare with "Optimal", we need the same graph.
-        # We generate one graph per run.
-        generator = InstanceGenerator(num_nodes=30, seed=None) 
+        try:
+            num_nodes = self.node_count_var.get()
+        except:
+            num_nodes = 30
+            
+        generator = InstanceGenerator(num_nodes=num_nodes, seed=None) 
         self.graph = generator.generate_vrp_instance()
         
         # Setup Visualizer
@@ -104,6 +143,8 @@ class VRPApp:
         
         if self.solver_name == "Greedy":
             solver = GreedySolver(self.graph, capacity=40)
+        elif self.solver_name == "SimulatedAnnealing":
+            solver = SimulatedAnnealingSolver(self.graph, capacity=40)
         else:
             solver = ORToolsSolver(self.graph, vehicle_capacity=40, num_vehicles=5)
             
@@ -112,8 +153,9 @@ class VRPApp:
             final_routes = routes
             # Update GUI from thread
             self.root.after(0, self.update_viz, routes, f"{self.solver_name} - Step {step}")
-            time.sleep(0.1) # Animation delay
+            time.sleep(0.05) # Animation delay
             
+        self.final_routes = final_routes
         final_cost = self.calculate_cost(final_routes)
         
         result_text = f"--- Results ---\n\n{self.solver_name} Cost: {final_cost:.2f}"
@@ -131,19 +173,25 @@ class VRPApp:
     def update_status(self, text):
         self.root.after(0, lambda: self.status_label.config(text=text))
 
-    def update_viz(self, routes, title):
-        self.viz.update(routes, title)
+    def update_viz(self, routes, title, linestyle='-'):
+        self.viz.update(routes, title, linestyle=linestyle)
 
     def finish_run(self, result_text):
         self.running = False
         self.status_label.config(text="Finished")
         self.result_label.config(text=result_text)
+        self.reset_btn.config(state=tk.NORMAL)
+        self.view_solver_rb.config(state=tk.NORMAL)
+        
         if self.optimal_routes:
-            self.view_optimal_btn.config(state=tk.NORMAL)
+            self.view_optimal_rb.config(state=tk.NORMAL)
 
-    def view_optimal(self):
-        if self.optimal_routes:
-            self.viz.update(self.optimal_routes, "Optimal Solution")
+    def toggle_view(self):
+        mode = self.view_mode_var.get()
+        if mode == "Solver" and self.final_routes:
+            self.viz.update(self.final_routes, f"{self.solver_name} Solution", linestyle='-')
+        elif mode == "Optimal" and self.optimal_routes:
+            self.viz.update(self.optimal_routes, "Optimal Solution", linestyle='--')
 
     def calculate_cost(self, routes):
         total_dist = 0
