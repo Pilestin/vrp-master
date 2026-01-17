@@ -17,7 +17,16 @@ SA_MAX_ITERATIONS = 200
 # ALNS (Adaptive Large Neighborhood Search)
 ALNS_ITERATIONS = 100
 ALNS_REMOVE_COUNT = 6 # Number of nodes to remove/reinsert in each step
+
 # Deep Learning
-DL_MODEL_PATH = "deep_learning/checkpoints/vrp_model.pth"
+DL_MODEL_TYPE = "attention_model"  # Options: "pointer_network", "attention_model"
+DL_MODEL_PATHS = {
+    "pointer_network": "deep_learning/checkpoints/pointer_network/vrp_model.pth",
+    "attention_model": "deep_learning/checkpoints/attention_model/vrp_model.pth",
+}
+# Legacy path for backwards compatibility
+DL_MODEL_PATH = DL_MODEL_PATHS.get(DL_MODEL_TYPE, "deep_learning/checkpoints/vrp_model.pth")
+
 # Visualization
-ANIMATION_DELAY = 0.05
+ANIMATION_DELAY = 0.3
+

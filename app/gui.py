@@ -13,9 +13,9 @@ from vrp_system.solvers.greedy_solver import GreedySolver
 from vrp_system.solvers.ortools_solver import ORToolsSolver
 from vrp_system.solvers.simulated_annealing_solver import SimulatedAnnealingSolver
 from vrp_system.solvers.alns_solver import ALNSSolver
-# Try importing NeuralSolver, if torch is missing, handle gracefully
+# Try importing neural solvers, if torch is missing, handle gracefully
 try:
-    from deep_learning.neural_solver import NeuralSolver
+    from deep_learning import get_neural_solver, get_available_models, get_model_info
     DL_AVAILABLE = True
 except ImportError:
     DL_AVAILABLE = False
@@ -54,9 +54,23 @@ class VRPApp:
         if DL_AVAILABLE:
             ttk.Radiobutton(self.control_frame, text="Neural Network (Deep Learning)", variable=self.solver_var, value="Neural").pack(anchor=tk.W, padx=10)
             
+            # Model type selection for neural networks
+            self.dl_model_frame = ttk.LabelFrame(self.control_frame, text="Neural Model Type")
+            self.dl_model_frame.pack(pady=5, padx=20, fill=tk.X)
+            
+            self.dl_model_var = tk.StringVar(value=config.DL_MODEL_TYPE)
+            model_names = {
+                "pointer_network": "Pointer Network (Bello 2016)",
+                "attention_model": "Attention Model (Kool 2019)"
+            }
+            for model_type in get_available_models():
+                display_name = model_names.get(model_type, model_type)
+                ttk.Radiobutton(self.dl_model_frame, text=display_name, 
+                               variable=self.dl_model_var, value=model_type).pack(anchor=tk.W, padx=5)
+            
         ttk.Radiobutton(self.control_frame, text="OR-Tools", variable=self.solver_var, value="ORTools").pack(anchor=tk.W, padx=10)
         
-        self.show_optimal_var = tk.BooleanVar(value=False)
+        self.show_optimal_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(self.control_frame, text="Calculate Optimal Solution (Benchmark)", variable=self.show_optimal_var).pack(pady=20, anchor=tk.W)
         
         self.run_btn = ttk.Button(self.control_frame, text="Run Simulation", command=self.run_simulation)
@@ -167,7 +181,8 @@ class VRPApp:
                                 iterations=config.ALNS_ITERATIONS, 
                                 remove_count=config.ALNS_REMOVE_COUNT)
         elif self.solver_name == "Neural" and DL_AVAILABLE:
-            solver = NeuralSolver(self.graph, capacity=config.VEHICLE_CAPACITY, model_path=config.DL_MODEL_PATH)
+            model_type = self.dl_model_var.get()
+            solver = get_neural_solver(model_type, self.graph, capacity=config.VEHICLE_CAPACITY)
         else:
             solver = ORToolsSolver(self.graph, vehicle_capacity=config.VEHICLE_CAPACITY, num_vehicles=config.NUM_VEHICLES)
             
