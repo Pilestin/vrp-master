@@ -32,14 +32,17 @@ def get_neural_solver(model_type: ModelType, graph: nx.Graph, capacity: int = 40
     elif model_type == "attention_model":
         from .attention_model.solver import AttentionModelSolver
         return AttentionModelSolver(graph, capacity)
+    elif model_type == "gnn_model":
+        from .gnn_model.solver import GNNSolver
+        return GNNSolver(graph, capacity)
     else:
         raise ValueError(f"Unknown model type: {model_type}. "
-                        f"Available: pointer_network, attention_model")
+                        f"Available: pointer_network, attention_model, gnn_model")
 
 
 def get_available_models() -> list:
     """Return list of available model types."""
-    return ["pointer_network", "attention_model"]
+    return ["pointer_network", "attention_model", "gnn_model"]
 
 
 def get_model_info(model_type: ModelType) -> dict:
@@ -63,6 +66,13 @@ def get_model_info(model_type: ModelType) -> dict:
             "paper": "Kool et al. (2019) 'Attention, Learn to Solve Routing Problems!'",
             "complexity": "Medium",
             "training_time": "Medium",
+        },
+        "gnn_model": {
+            "name": "Graph Neural Network",
+            "description": "Graph Attention Network with edge-based message passing",
+            "paper": "Joshi et al. (2019) + Veličković et al. (2018) 'Graph Attention Networks'",
+            "complexity": "High",
+            "training_time": "Slow",
         }
     }
     return info.get(model_type, {})

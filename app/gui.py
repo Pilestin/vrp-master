@@ -61,7 +61,8 @@ class VRPApp:
             self.dl_model_var = tk.StringVar(value=config.DL_MODEL_TYPE)
             model_names = {
                 "pointer_network": "Pointer Network (Bello 2016)",
-                "attention_model": "Attention Model (Kool 2019)"
+                "attention_model": "Attention Model (Kool 2019)",
+                "gnn_model": "Graph Neural Network (GNN)"
             }
             for model_type in get_available_models():
                 display_name = model_names.get(model_type, model_type)
@@ -75,6 +76,11 @@ class VRPApp:
         
         self.run_btn = ttk.Button(self.control_frame, text="Run Simulation", command=self.run_simulation)
         self.run_btn.pack(pady=10, fill=tk.X)
+        
+        # Compare All DL Models button
+        if DL_AVAILABLE:
+            self.compare_dl_btn = ttk.Button(self.control_frame, text="Compare All DL Models", command=self.compare_all_dl_models)
+            self.compare_dl_btn.pack(pady=5, fill=tk.X)
         
         self.reset_btn = ttk.Button(self.control_frame, text="Reset / New Instance", command=self.reset_simulation, state=tk.DISABLED)
         self.reset_btn.pack(pady=5, fill=tk.X)
@@ -239,6 +245,120 @@ class VRPApp:
                 u, v = route[i], route[i+1]
                 total_dist += self.graph[u][v]['weight']
         return total_dist
+    
+    def compare_all_dl_models(self):
+        """Compare all Deep Learning models against optimal solution."""
+        if self.running:
+            return
+        self.running = True
+        self.run_btn.config(state=tk.DISABLED)
+        if DL_AVAILABLE:
+            self.compare_dl_btn.config(state=tk.DISABLED)
+        self.reset_btn.config(state=tk.DISABLED)
+        self.view_solver_rb.config(state=tk.DISABLED)
+        self.view_optimal_rb.config(state=tk.DISABLED)
+        
+        self.status_label.config(text="Generating Instance...")
+        self.result_label.config(text="")
+        self.optimal_routes = None
+        self.final_routes = None
+        
+        # Generate Instance
+        try:
+            num_nodes = self.node_count_var.get()
+        except:
+            num_nodes = config.DEFAULT_NUM_NODES
+            
+        generator = InstanceGenerator(num_nodes=num_nodes, seed=config.SEED) 
+        self.graph = generator.generate_vrp_instance()
+        
+        # Setup Visualizer
+        self.viz = Visualizer(self.graph, ax=self.ax)
+        self.viz.draw_base()
+        self.canvas.draw()
+        
+        # Start comparison in a thread
+        threading.Thread(target=self.compare_dl_logic, daemon=True).start()
+    
+    def compare_dl_logic(self):
+        """Run all DL models and compare against optimal."""
+        results = {}
+        
+        # Calculate optimal solution first
+        self.update_status("Calculating Optimal Solution...")
+        solver = ORToolsSolver(self.graph, vehicle_capacity=config.VEHICLE_CAPACITY, num_vehicles=config.NUM_VEHICLES)
+        for routes in solver.solve():
+            self.optimal_routes = routes
+        
+        optimal_cost = self.calculate_cost(self.optimal_routes) if self.optimal_routes else None
+        
+        if optimal_cost is None:
+            self.root.after(0, self.finish_run, "Error: Could not calculate optimal solution")
+            return
+        
+        # Run each DL model
+        model_names = {
+            "pointer_network": "Pointer Network",
+            "attention_model": "Attention Model",
+            "gnn_model": "GNN"
+        }
+        
+        for model_type in get_available_models():
+            display_name = model_names.get(model_type, model_type)
+            self.update_status(f"Running {display_name}...")
+            
+            try:
+                solver = get_neural_solver(model_type, self.graph, capacity=config.VEHICLE_CAPACITY)
+                final_routes = []
+                for step, routes in enumerate(solver.solve()):
+                    final_routes = routes
+                    self.root.after(0, self.update_viz, routes, f"{display_name} - Step {step}")
+                    time.sleep(0.1)  # Faster animation for comparison
+                
+                cost = self.calculate_cost(final_routes)
+                gap = ((cost - optimal_cost) / optimal_cost) * 100
+                results[model_type] = {"name": display_name, "cost": cost, "gap": gap, "routes": final_routes}
+            except Exception as e:
+                results[model_type] = {"name": display_name, "cost": None, "gap": None, "error": str(e)}
+        
+        # Store best model routes for viewing
+        best_model = min(results.keys(), key=lambda x: results[x].get("cost", float("inf")) or float("inf"))
+        self.final_routes = results[best_model].get("routes", [])
+        self.solver_name = results[best_model]["name"]
+        
+        # Build result text
+        result_text = "=== DL Model Comparison ==="
+        result_text += f"\n\nOptimal: {optimal_cost:.2f}"
+        result_text += "\n" + "-" * 25
+        
+        # Sort by gap
+        sorted_models = sorted(results.keys(), key=lambda x: results[x].get("gap", float("inf")) or float("inf"))
+        
+        for model_type in sorted_models:
+            r = results[model_type]
+            if r.get("cost") is not None:
+                result_text += f"\n\n{r['name']}:"
+                result_text += f"\n  Cost: {r['cost']:.2f}"
+                result_text += f"\n  Gap: {r['gap']:.2f}%"
+            else:
+                result_text += f"\n\n{r['name']}: Error"
+        
+        # Show best
+        best = results[sorted_models[0]]
+        if best.get("gap") is not None:
+            result_text += f"\n\n*** Best: {best['name']} ***"
+        
+        self.root.after(0, self.finish_comparison, result_text)
+    
+    def finish_comparison(self, result_text):
+        """Finish comparison mode."""
+        self.running = False
+        self.status_label.config(text="Comparison Finished")
+        self.result_label.config(text=result_text)
+        self.reset_btn.config(state=tk.NORMAL)
+        self.view_solver_rb.config(state=tk.NORMAL)
+        if self.optimal_routes:
+            self.view_optimal_rb.config(state=tk.NORMAL)
 
 if __name__ == "__main__":
     root = tk.Tk()

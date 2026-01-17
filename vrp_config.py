@@ -23,6 +23,7 @@ DL_MODEL_TYPE = "attention_model"  # Options: "pointer_network", "attention_mode
 DL_MODEL_PATHS = {
     "pointer_network": "deep_learning/checkpoints/pointer_network/vrp_model.pth",
     "attention_model": "deep_learning/checkpoints/attention_model/vrp_model.pth",
+    "gnn_model": "deep_learning/checkpoints/gnn_model/vrp_model.pth",
 }
 # Legacy path for backwards compatibility
 DL_MODEL_PATH = DL_MODEL_PATHS.get(DL_MODEL_TYPE, "deep_learning/checkpoints/vrp_model.pth")
